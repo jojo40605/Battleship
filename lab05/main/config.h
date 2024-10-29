@@ -4,8 +4,8 @@
 #define CONFIG_GAME_TIMER_PERIOD 40.0E-3f
 
 // Board
-#define CONFIG_BOARD_R 5 // Rows
-#define CONFIG_BOARD_C 10 // Columns
+#define CONFIG_BOARD_R 7 // Rows
+#define CONFIG_BOARD_C 7 // Columns
 #define CONFIG_BOARD_N 3 // Number of contiguous marks
 // #define CONFIG_BOARD_R 5 // Rows
 // #define CONFIG_BOARD_C 7 // Columns
