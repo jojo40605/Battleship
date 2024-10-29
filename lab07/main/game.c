@@ -12,16 +12,32 @@
 
 #define BIT_SHIFT 4
 #define FULL_LOW_NIB 0x0F
+#define MAX_SHIPS 5
 
 // States for the SM
 enum ticTacToe_st_t {
     init_st,
     new_game_st,
+    ship_place_st,
     wait_mark_st,
     mark_st,
     wait_restart_st
 };
 static enum ticTacToe_st_t currentState;
+
+// Structure for a ship
+typedef struct {
+    int length;       // Length of the ship
+    int r;            // Row position
+    int c;            // Column position
+    bool horizontal;  // Orientation of the ship
+    bool sunk;        // If the ship is sunk
+} ship_t;
+
+static ship_t ships[MAX_SHIPS];
+static int ship_count;
+static int hits;
+//if total hits for a single player == total sizes of all ships then game over
 
 // Initialize SM
 void game_init() {
@@ -42,8 +58,11 @@ void game_tick() {
         case new_game_st:
             currentState = wait_mark_st;
             break;
+        case ship_place_st:
+            //cycle through the different ship types
+            currentState = wait_mark_st;
+            break;        
         case wait_mark_st:           
-            //MILESTONE 2
             // Check if data is received from the connected controller
             if (com_read(&byte, 1) > 0) {
                 // Unpack the byte into row and column
@@ -76,7 +95,7 @@ void game_tick() {
             }            
             break;
         case mark_st:
-            if (isWin || isDraw) {
+            if (isWin || isDraw) { 
                 currentState = wait_restart_st;
                 isWin = false;
                 isDraw = false;
@@ -132,7 +151,7 @@ void game_tick() {
             break;
         case mark_st:
             // SET MARK
-            if (boolTurn) {
+            if (boolTurn) { //change to set based on hit or miss
                 board_set(r, c, X_m);
                 graphics_drawX(r, c, CONFIG_MARK_CLR);
             } else {
@@ -140,7 +159,7 @@ void game_tick() {
                 graphics_drawO(r, c, CONFIG_MARK_CLR);
             }
 
-            // CHECK FOR WIN/DRAW
+            // CHECK FOR WIN/DRAW //check total number of hits
             if (board_winner(boolTurn ? X_m : O_m)) {
                 isWin = true;
                 graphics_drawMessage(boolTurn ? "Player X Wins" : "Player O Wins", WHITE, CONFIG_BACK_CLR);
