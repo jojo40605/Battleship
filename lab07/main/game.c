@@ -12,7 +12,7 @@
 
 #define BIT_SHIFT 4
 #define FULL_LOW_NIB 0x0F
-#define MAX_SHIPS 5
+#define MAX_SHIPS 4
 
 // States for the SM
 enum Battleship_st_t {
@@ -49,6 +49,8 @@ void game_tick() {
     static bool boolTurn = true; // X = true, O = false
     static int8_t r, c;
     static uint8_t byte;
+    static bool currHor = false; //current orientation for placement
+    static bool refreshScreen;
 
     // State transitions
     switch (currentState) {
@@ -56,11 +58,10 @@ void game_tick() {
             currentState = new_game_st;
             break;
         case new_game_st:
-            currentState = wait_mark_st;
+            currentState = ship_place_st;
             break;
         case ship_place_st:
-            //cycle through the different ship types
-            currentState = wait_mark_st;
+
             break;        
         case wait_mark_st:           
             // Check if data is received from the connected controller
@@ -129,16 +130,50 @@ void game_tick() {
             // X TURN
             boolTurn = true;
             // SET NAV TO CENTER
-            nav_set_loc(1, 1);
+            nav_set_loc(0,0);
             // DISPLAY NEXT PLAYER
             graphics_drawMessage("Next Player: X", WHITE, CONFIG_BACK_CLR);
             
+            //create ships size 1 - MAX_SHIPS
+            for(int i = 0; i < MAX_SHIPS; i++){
+                ships[i].length = i+1;
+                ships[i].horizontal = true;
+            }
+
             //MILESTONE 2
             //FLUSH COMS
             while (com_read(&byte, 1)) {
                 // Just read and discard the bytes
             }
             break;
+        case ship_place_st:
+            for (int numShip = 5; numShip > 1; numShip--){
+                nav_get_loc(&r, &c);
+
+                lcd_fillScreen(CONFIG_BACK_CLR);
+                graphics_drawGrid(CONFIG_GRID_CLR);
+                //TODO fix the buffer look at lab 1/2
+                graphics_drawHighlight(r,c,WHITE);
+                if (currHor){ //Horizontal
+                    for (int i = c; i < ships[numShip].length; i++){
+                        graphics_drawHighlight(r,i,WHITE);
+                    }
+                } else{
+                    for (int i = r; i < ships[numShip].length; i++){
+                        graphics_drawHighlight(i,c,WHITE);
+                    }
+                }
+
+
+                if (!pin_get_level(HW_BTN_A)) { //place
+                    break;                    
+                }
+                if (!pin_get_level(HW_BTN_B)) { //rotate
+                    currHor = !currHor;
+                    refreshScreen = true;
+                }
+            }
+                break;
         case wait_mark_st:
             // WAIT FOR A
             if (!pin_get_level(HW_BTN_A)) {            
