@@ -15,7 +15,7 @@
 #define MAX_SHIPS 5
 
 // States for the SM
-enum ticTacToe_st_t {
+enum Battleship_st_t {
     init_st,
     new_game_st,
     ship_place_st,
@@ -23,7 +23,7 @@ enum ticTacToe_st_t {
     mark_st,
     wait_restart_st
 };
-static enum ticTacToe_st_t currentState;
+static enum Battleship_st_t currentState;
 
 // Structure for a ship
 typedef struct {
