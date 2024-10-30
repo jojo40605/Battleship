@@ -19,8 +19,9 @@ enum Battleship_st_t {
     init_st,
     new_game_st,
     ship_place_st,
-    wait_mark_st,
-    mark_st,
+    attack_init_st,
+    attack_wait_st,
+    attack_shoot_st,
     wait_restart_st
 };
 static enum Battleship_st_t currentState;
@@ -45,8 +46,8 @@ void game_init() {
 }
 
 void game_tick() {
-    static bool isWin = false, isVal = false, isRestart = false, isDraw = false;
-    static bool boolTurn = true; // X = true, O = false
+    static bool isWin = false, isVal = false, isRestart = false;
+    static bool boolTurn = true; // Player 1 = true, Player 2 = false
     static int8_t r, c;
     static uint8_t byte;
     static bool currHor = false; //current orientation for placement
@@ -81,28 +82,18 @@ void game_tick() {
                     graphics_drawO(r, c, CONFIG_MARK_CLR);
                     }
                 }                
+            //cycle through the different ship types
+            if (ship_count == MAX_SHIPS) {
+                currentState = attack_init_st;
             }
-            else if (!pin_get_level(HW_BTN_A)) {
-                // Encode row and column into a single byte
-                nav_get_loc(&r, &c);
-                byte = (r << BIT_SHIFT) | (c & FULL_LOW_NIB);
-                com_write(&byte, 1);
-            }
-            
-            //MILESTONE 1
-            if (isVal) {
-                currentState = mark_st;
-                isVal = false;
-            }            
+            break;  
+        case attack_init_st:
+            currentState = attack_wait_st;
             break;
-        case mark_st:
-            if (isWin || isDraw) { 
-                currentState = wait_restart_st;
-                isWin = false;
-                isDraw = false;
-            } else {
-                currentState = wait_mark_st;
-            }
+        case attack_wait_st:           
+         
+            break;
+        case attack_shoot_st:
             break;
         case wait_restart_st:
             if (isRestart) {
@@ -174,35 +165,18 @@ void game_tick() {
                 }
             }
                 break;
-        case wait_mark_st:
-            // WAIT FOR A
-            if (!pin_get_level(HW_BTN_A)) {            
-                nav_get_loc(&r, &c);
-                if (board_get(r, c) == no_m) {
-                    // Mark is valid
-                    isVal = true;
-                }
-            }
+        case attack_wait_st:
+            
             break;
-        case mark_st:
+        case attack_shoot_st:
             // SET MARK
             if (boolTurn) { //change to set based on hit or miss
-                board_set(r, c, X_m);
-                graphics_drawX(r, c, CONFIG_MARK_CLR);
-            } else {
-                board_set(r, c, O_m);
-                graphics_drawO(r, c, CONFIG_MARK_CLR);
-            }
+                //if (is_hit(row, column)) {
 
-            // CHECK FOR WIN/DRAW //check total number of hits
-            if (board_winner(boolTurn ? X_m : O_m)) {
-                isWin = true;
-                graphics_drawMessage(boolTurn ? "Player X Wins" : "Player O Wins", WHITE, CONFIG_BACK_CLR);
-                break;
-            } else if (board_mark_count() >= CONFIG_BOARD_SPACES) {
-                isDraw = true;
-                graphics_drawMessage("It's a Draw!", WHITE, CONFIG_BACK_CLR);
-                break;
+                //}
+            }
+            else {
+                
             }
 
             // DISPLAY STATUS
@@ -214,7 +188,6 @@ void game_tick() {
             if (!pin_get_level(HW_BTN_START)) {
                 isRestart = false;
                 isWin = false;
-                isDraw = false;
                 currentState = init_st;
                 boolTurn = 1;
             }
@@ -223,4 +196,27 @@ void game_tick() {
             printf("ERROR ACTION");
             break;
     }
+}
+}
+bool is_hit(row, column) {
+    for (uint16_t i = 0; i < MAX_SHIPS; i++) {
+        ship_t *ship = &ships[i];
+
+        if (ship->horizontal) {
+            for (int j = 0; j < ship->length; j++) {
+                if (ship->r == row && (ship->c + j) == column) {
+                    return true;
+                }
+            }
+        }
+        else {
+            for (int j = 0; j < ship->length; j++) {
+                if (ship->c == column && (ship->r + j) == row) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    return false;
 }

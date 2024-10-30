@@ -6,8 +6,9 @@
 
 typedef enum {
 	no_m,
-	X_m,
-	O_m,
+	miss_m,
+	hit_m,
+	sink_m
 } mark_t;
 
 // Clear the board
