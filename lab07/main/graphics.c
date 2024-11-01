@@ -77,3 +77,12 @@ void graphics_drawHighlight(int8_t r, int8_t c, color_t color)
 	lcd_drawRect(x+HIGH_MARGIN, y+HIGH_MARGIN,
 		CELL_W-2*HIGH_MARGIN+1, CELL_H-2*HIGH_MARGIN+1, color);
 }
+
+void graphics_drawShip(int8_t r, int8_t c, color_t color)
+{
+	coord_t x = VIEW_X + c * CELL_W;
+	coord_t y = VIEW_Y + r * CELL_H;
+
+	lcd_drawRect(x+HIGH_MARGIN + 2, y+HIGH_MARGIN + 2,
+		CELL_W-2*HIGH_MARGIN - 3, CELL_H-2*HIGH_MARGIN - 3, color);
+}

@@ -8,11 +8,20 @@
 #include "lcd.h"
 #include "joy.h"
 #include "pin.h"
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_log.h"
+
 #include <stdio.h>
 
 #define BIT_SHIFT 4
 #define FULL_LOW_NIB 0x0F
 #define MAX_SHIPS 4
+#define delayMS(ms) \
+	vTaskDelay(((ms)+(portTICK_PERIOD_MS-1))/portTICK_PERIOD_MS)
+
+
 
 // States for the SM
 enum Battleship_st_t {
@@ -33,7 +42,18 @@ typedef struct {
     int c;            // Column position
     bool horizontal;  // Orientation of the ship
     bool sunk;        // If the ship is sunk
+    color_t color;    //Color of placement
 } ship_t;
+
+/*TODOS FOR JOSEPH
+    create enum for colors and set unique ship color in new_game_st
+    fix bug where when placing ship the last cursor is not removed
+    create array to actually save the ship placement
+
+    create a helper function to see if ship placement is valid
+    use array to check if ship placement is valid (no other ships)
+    check if ship is out of bounds (check grid size)
+*/
 
 static ship_t ships[MAX_SHIPS];
 static int ship_count;
@@ -49,9 +69,11 @@ void game_tick() {
     static bool isWin = false, isVal = false, isRestart = false;
     static bool boolTurn = true; // Player 1 = true, Player 2 = false
     static int8_t r, c;
+    static int8_t prev_r = -1, prev_c = -1;
+    static bool prev_horizontal = true;
     static uint8_t byte;
     static bool currHor = false; //current orientation for placement
-    static bool refreshScreen;
+    static int8_t numShip = MAX_SHIPS - 1;
 
     // State transitions
     switch (currentState) {
@@ -62,31 +84,10 @@ void game_tick() {
             currentState = ship_place_st;
             break;
         case ship_place_st:
-
-            break;        
-        case wait_mark_st:           
-            // Check if data is received from the connected controller
-            if (com_read(&byte, 1) > 0) {
-                // Unpack the byte into row and column
-                r = (byte >> BIT_SHIFT);
-                c = byte & FULL_LOW_NIB;
-
-                // Process the location as if Button A was pressed
-                if (board_get(r, c) == no_m) {
-                    isVal = true;
-                    if (boolTurn) { //X
-                    board_set(r, c, X_m);
-                    graphics_drawX(r, c, CONFIG_MARK_CLR);
-                } else { //O
-                    board_set(r, c, O_m);
-                    graphics_drawO(r, c, CONFIG_MARK_CLR);
-                    }
-                }                
-            //cycle through the different ship types
-            if (ship_count == MAX_SHIPS) {
+            if (numShip < 0){
                 currentState = attack_init_st;
             }
-            break;  
+            break;        
         case attack_init_st:
             currentState = attack_wait_st;
             break;
@@ -112,6 +113,7 @@ void game_tick() {
             // NOTHING
             break;
         case new_game_st:
+            lcd_frameEnable();
             // CLEAR BOARD
             board_clear();
             // DRAW GAME BACKGROUND
@@ -124,11 +126,13 @@ void game_tick() {
             nav_set_loc(0,0);
             // DISPLAY NEXT PLAYER
             graphics_drawMessage("Next Player: X", WHITE, CONFIG_BACK_CLR);
-            
+            lcd_writeFrame();
+
             //create ships size 1 - MAX_SHIPS
             for(int i = 0; i < MAX_SHIPS; i++){
                 ships[i].length = i+1;
                 ships[i].horizontal = true;
+                ships[i].color = CYAN;
             }
 
             //MILESTONE 2
@@ -138,32 +142,72 @@ void game_tick() {
             }
             break;
         case ship_place_st:
-            for (int numShip = 5; numShip > 1; numShip--){
+                bool shipPlaced = false;
+                lcd_frameEnable();
                 nav_get_loc(&r, &c);
-
-                lcd_fillScreen(CONFIG_BACK_CLR);
-                graphics_drawGrid(CONFIG_GRID_CLR);
-                //TODO fix the buffer look at lab 1/2
+                
+                if ((r != prev_r) || (c != prev_c) || (prev_horizontal != currHor)){ //if the cursor moved or rotated
                 graphics_drawHighlight(r,c,WHITE);
-                if (currHor){ //Horizontal
-                    for (int i = c; i < ships[numShip].length; i++){
-                        graphics_drawHighlight(r,i,WHITE);
+
+                    //erase previous cursor
+                    if (prev_horizontal){ // was Horizontal
+                        for (int i = 0; i < ships[numShip].length; i++){
+                            graphics_drawHighlight(prev_r, prev_c + i, CONFIG_BACK_CLR);
+                        }
+                    } else{
+                        for (int i = 0; i < ships[numShip].length; i++){
+                            graphics_drawHighlight(prev_r + i, prev_c, CONFIG_BACK_CLR);
+                        }
                     }
-                } else{
-                    for (int i = r; i < ships[numShip].length; i++){
-                        graphics_drawHighlight(i,c,WHITE);
+
+                    //draw new cursor
+                    if (currHor){ //Horizontal
+                        for (int i = 0; i < ships[numShip].length; i++){
+                            graphics_drawHighlight(r,c+i,WHITE);
+                        }
+                    } else{
+                        for (int i = 0; i < ships[numShip].length; i++){
+                            graphics_drawHighlight(r+i,c,WHITE);
+                        }
                     }
-                }
+                    lcd_writeFrame();
+                  	
 
 
-                if (!pin_get_level(HW_BTN_A)) { //place
-                    break;                    
+                } else { //the cursor didn't move
+
                 }
+               
+                prev_c = c;
+                prev_r = r;
+                prev_horizontal = currHor;
+
+                
                 if (!pin_get_level(HW_BTN_B)) { //rotate
                     currHor = !currHor;
-                    refreshScreen = true;
                 }
-            }
+
+                if (!pin_get_level(HW_BTN_A)) { //place
+                    graphics_drawHighlight(r,c,CYAN);
+                    if (currHor){ //Horizontal
+                        for (int i = 0; i < ships[numShip].length; i++){
+                            graphics_drawShip(r,c+i,ships[numShip].color);
+                        }
+                    } else{
+                        for (int i = 0; i < ships[numShip].length; i++){
+                            graphics_drawShip(r+i,c,ships[numShip].color);
+                        }
+                    }
+                    if (!shipPlaced){
+                        numShip--; //move to next ship     
+                        shipPlaced = true;
+                        for(;;){
+                            if (pin_get_level(HW_BTN_A)) break;
+                        };
+                    }                     
+                }
+                
+                printf("%d\n", numShip); 
                 break;
         case attack_wait_st:
             
@@ -197,8 +241,8 @@ void game_tick() {
             break;
     }
 }
-}
-bool is_hit(row, column) {
+
+bool is_hit(int8_t row, int8_t column) {
     for (uint16_t i = 0; i < MAX_SHIPS; i++) {
         ship_t *ship = &ships[i];
 

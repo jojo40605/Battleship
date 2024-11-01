@@ -47,4 +47,7 @@ void graphics_drawO(int8_t r, int8_t c, color_t color);
  */
 void graphics_drawHighlight(int8_t r, int8_t c, color_t color);
 
+//for now the same as drawHighlight but just slightly smaller
+void graphics_drawShip(int8_t r, int8_t c, color_t color);
+
 #endif // GRAPHICS_H_

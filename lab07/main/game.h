@@ -7,6 +7,6 @@ void game_init(void);
 // Update the game logic.
 void game_tick(void);
 
-void is_hit(r, c);
+bool is_hit(int8_t r, int8_t c);
 
 #endif // GAME_H_
