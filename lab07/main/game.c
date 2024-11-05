@@ -52,15 +52,6 @@ const uint16_t ship_colors[MAX_SHIPS] = {
     RGB565(238, 130, 238) // Violet
 };
 
-/*TODOS FOR JOSEPH
-    create enum for colors and set unique ship color in new_game_st
-    fix bug where when placing ship the last cursor is not removed -- erase now always erases one extra
-    create array to actually save the ship placement
-
-    create a helper function to see if ship placement is valid
-    use array to check if ship placement is valid (no other ships)
-    check if ship is out of bounds (check grid size)
-*/
 
 static ship_t ships[MAX_SHIPS];
 static int ship_count;
