@@ -135,7 +135,6 @@ void game_tick() {
                 ships[i].color = ship_colors[i % (sizeof(ship_colors) / sizeof(ship_colors[0]))];
             }
 
-            //MILESTONE 2
             //FLUSH COMS
             while (com_read(&byte, 1)) {
                 // Just read and discard the bytes
@@ -178,7 +177,7 @@ void game_tick() {
 
                 }
                
-                prev_c = c;
+                prev_c = c; //update the prev trackers for erasing on the next loop
                 prev_r = r;
                 prev_horizontal = currHor;
 
@@ -186,7 +185,7 @@ void game_tick() {
                 if (!pin_get_level(HW_BTN_B)) { //rotate
                     currHor = !currHor;
                     for(;;){
-                            if (pin_get_level(HW_BTN_B)) break;
+                            if (pin_get_level(HW_BTN_B)) break; //prevent holding the button
                         };
                 }
 
@@ -207,7 +206,7 @@ void game_tick() {
                         }
                         numShip--; //move to next ship     
                         for(;;){
-                            if (pin_get_level(HW_BTN_A)) break;
+                            if (pin_get_level(HW_BTN_A)) break; //prevent holding the button
                         };
                     }else{ //can't place
                         //TODO ADD VISUAL ERROR NOTICE
