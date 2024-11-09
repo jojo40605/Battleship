@@ -15,7 +15,7 @@
 #include "hw.h"
 
 /** @name Use to create a custom color. */
-#define rgb565(r, g, b) ((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | (((b) & 0xF8) >> 3))
+#define rgb565(r, g, b) (((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | (((b) & 0xF8) >> 3)
 
 /** @name Standard colors. */
 /** @{ */

@@ -15,20 +15,27 @@
 
 #include <stdio.h>
 
-#define BIT_SHIFT 4
-#define FULL_LOW_NIB 0x0F
-#define MAX_SHIPS 5
+#define BIT_SHIFT      4
+#define FULL_LOW_NIB   0x0F
+#define MAX_SHIPS      5
+#define SHIP_CLR_SIZE  11
+#define SHIP_LIVES     15
+#define R1             0
+#define R2             1
+#define R3             2
+#define R4             3
+#define R5             4
+#define MY_WIN         1
+#define ENEMY_WIN      2
 #define delayMS(ms) \
 	vTaskDelay(((ms)+(portTICK_PERIOD_MS-1))/portTICK_PERIOD_MS)
-
-#define RGB565(r, g, b)  (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3))
-
 
 // States for the SM
 enum Battleship_st_t {
     init_st,
     new_game_st,
     ship_place_st,
+    waiting_for_opponent_st,
     attack_init_st,
     attack_wait_st,
     attack_shoot_st,
@@ -38,24 +45,25 @@ static enum Battleship_st_t currentState;
 
 
 //Enum for ship colors
-const uint16_t ship_colors[MAX_SHIPS] = {
-    RGB565(0, 255, 0),   // Bright green
-    RGB565(255, 165, 0), // Bright orange
-    RGB565(160, 32, 240), // Bright purple
-    RGB565(0, 150, 0),    // Medium green
-    RGB565(255, 100, 0),  // Darker orange
-    RGB565(75, 0, 130),   // Indigo
-    RGB565(34, 139, 34),  // Forest green
-    RGB565(255, 69, 0),   // Red-orange
-    RGB565(218, 112, 214), // Orchid
-    RGB565(173, 255, 47), // Green-yellow
-    RGB565(238, 130, 238) // Violet
+const uint16_t ship_colors[SHIP_CLR_SIZE] = {
+    rgb565(0, 255, 0),   // Bright green
+    rgb565(255, 165, 0), // Bright orange
+    rgb565(160, 32, 240), // Bright purple
+    rgb565(0, 150, 0),    // Medium green
+    rgb565(255, 100, 0),  // Darker orange
+    rgb565(75, 0, 130),   // Indigo
+    rgb565(34, 139, 34),  // Forest green
+    rgb565(255, 69, 0),   // Red-orange
+    rgb565(218, 112, 214), // Orchid
+    rgb565(173, 255, 47), // Green-yellow
+    rgb565(238, 130, 238) // Violet
 };
 
 
 static ship_t ships[MAX_SHIPS];
 static int ship_count;
-static int hits;
+static uint8_t player_lives = SHIP_LIVES;
+static uint8_t enemy_lives = SHIP_LIVES;
 static int myShips[CONFIG_BOARD_R][CONFIG_BOARD_C];
 static int enemyShips[CONFIG_BOARD_R][CONFIG_BOARD_C];
 //if total hits for a single player == total sizes of all ships then game over
@@ -66,7 +74,10 @@ void game_init() {
 }
 
 void game_tick() {
-    static bool isWin = false, isVal = false, isRestart = false;
+    static bool isRestart = false;
+    static bool isEmpty = false;
+    static uint8_t win = 0;      // No win
+    static bool enemyShipsReceived = false;
     static bool boolTurn = true; // Player 1 = true, Player 2 = false
     static int8_t r, c;
     static int8_t prev_r = -1, prev_c = -1;
@@ -74,6 +85,12 @@ void game_tick() {
     static uint8_t byte;
     static bool currHor = false; //current orientation for placement
     static int8_t numShip = MAX_SHIPS - 1;
+
+    // Bytes used to send/receive array
+    uint8_t bmrow1 = 0, bmrow2 = 0, bmrow3 = 0, bmrow4 = 0, bmrow5 = 0;
+    uint8_t berow1 = 0, berow2 = 0, berow3 = 0, berow4 = 0, berow5 = 0;
+
+    printf("%d\n", currentState);
 
     // State transitions
     switch (currentState) {
@@ -85,16 +102,32 @@ void game_tick() {
             break;
         case ship_place_st:
             if (numShip < 0){
-                currentState = attack_init_st;
+                currentState = waiting_for_opponent_st;
             }
             break;        
+        case waiting_for_opponent_st:
+            if (enemyShipsReceived) {
+                currentState = attack_init_st;
+            }
+            break;
         case attack_init_st:
             currentState = attack_wait_st;
             break;
-        case attack_wait_st:           
+        case attack_wait_st:     
+            if (isEmpty) {
+                isEmpty = false;
+                currentState = attack_shoot_st;
+            }      
          
             break;
         case attack_shoot_st:
+            if (win) {
+                currentState = wait_restart_st;
+            }
+            else {
+                currentState = attack_wait_st;
+            }
+
             break;
         case wait_restart_st:
             if (isRestart) {
@@ -118,7 +151,7 @@ void game_tick() {
             board_clear();
             // DRAW GAME BACKGROUND
             lcd_fillScreen(CONFIG_BACK_CLR);
-            // DRAW GRID isVal = false;
+            // DRAW GRID 
             graphics_drawGrid(CONFIG_GRID_CLR);
             // X TURN
             boolTurn = true;
@@ -141,12 +174,12 @@ void game_tick() {
             }
             break;
         case ship_place_st:
-                lcd_frameEnable();
+                //lcd_frameEnable();
                 nav_get_loc(&r, &c);
                 
                 if ((r != prev_r) || (c != prev_c) || (prev_horizontal != currHor)){ //if the cursor moved or rotated
                 graphics_drawHighlight(r,c,WHITE); //draw cursor
-                graphics_drawMessage("PLACE YOUR SHIPS (PLACE-A ROTATE-B)", WHITE, CONFIG_BACK_CLR); //redraw text
+                graphics_drawMessage("PLACE YOUR SHIPS (PLACE - A   ROTATE - B)", WHITE, CONFIG_BACK_CLR); //redraw text
 
                     //erase previous higlights
                     if (prev_horizontal){ // was Horizontal
@@ -170,8 +203,6 @@ void game_tick() {
                         }
                     }
                     lcd_writeFrame();
-                  	
-
 
                 } else { //the cursor didn't move
 
@@ -213,31 +244,172 @@ void game_tick() {
                     }                     
                 }
                 
-                
                 break;
+        case waiting_for_opponent_st:
+            // Pack friendly ship array into 5 bytes
+            for (int col = 0; col < CONFIG_BOARD_C; col++) {
+                if (myShips[R1][col] == 1) {
+                    bmrow1 = (bmrow1 | 1 << (col));
+                }
+                if (myShips[R2][col] == 1) {
+                    bmrow2 = (bmrow2 | 1 << (col));
+                }
+                if (myShips[R3][col] == 1) {
+                    bmrow3 = (bmrow3 | 1 << (col));
+                }
+                if (myShips[R4][col] == 1) {
+                    bmrow4 = (bmrow4 | 1 << (col));
+                }
+                if (myShips[R5][col] == 1) {
+                    bmrow5 = (bmrow5 | 1 << (col));
+                }
+            }
+
+            // Send friendly ship bytes
+            com_write(&bmrow1, sizeof(bmrow1));
+            com_write(&bmrow2, sizeof(bmrow2));
+            com_write(&bmrow3, sizeof(bmrow3));
+            com_write(&bmrow4, sizeof(bmrow4));
+            com_write(&bmrow5, sizeof(bmrow5));
+
+            // Read enemy data bytes
+            com_read(&berow1, sizeof(berow1));
+            com_read(&berow2, sizeof(berow2));
+            com_read(&berow3, sizeof(berow3));
+            com_read(&berow4, sizeof(berow4));
+            com_read(&berow5, sizeof(berow5));
+
+            // printf("Packed byte row 1: %d\n", bmrow1);
+            // printf("Packed byte row 2: %d\n", bmrow2);
+            // printf("Packed byte row 3: %d\n", bmrow3);
+            // printf("Packed byte row 4: %d\n", bmrow4);
+            // printf("Packed byte row 5: %d\n\n\n", bmrow5); 
+
+            // printf("Packed byte row 1: %d\n", berow1);
+            // printf("Packed byte row 2: %d\n", berow2);
+            // printf("Packed byte row 3: %d\n", berow3);
+            // printf("Packed byte row 4: %d\n", berow4);
+            // printf("Packed byte row 5: %d\n\n\n", berow5); 
+
+            // Unpack enemy bytes into array
+            for (int col = 0; col < CONFIG_BOARD_C; col++) {
+                if ((berow1 & 1) == 1) {
+                    enemyShips[R1][col] = 1;
+                }
+
+                if ((berow2 & 1) == 1) {
+                    enemyShips[R2][col] = 1;
+                }      
+
+                if ((berow3 & 1) == 1) {
+                    enemyShips[R3][col] = 1;
+                }       
+
+                if ((berow4 & 1) == 1) {
+                    enemyShips[R4][col] = 1;
+                }       
+
+                if ((berow5 & 1) == 1) {
+                    enemyShips[R5][col] = 1;
+                }       
+
+                berow1 = (berow1 >> 1);
+                berow2 = (berow2 >> 1);
+                berow3 = (berow3 >> 1); 
+                berow4 = (berow4 >> 1); 
+                berow5 = (berow5 >> 1);      
+            }
+
+            // Check to see if enemy array has been received
+            for (int row = 0; row < CONFIG_BOARD_R; row++) {
+                for (int col = 0; col < CONFIG_BOARD_C; col++) {
+                    if (enemyShips[row][col] == 1) {
+                        enemyShipsReceived = true;
+                    }
+                }
+
+                if (enemyShipsReceived == true) {
+                    break;
+                }
+            }
+            
+            break;
+        case attack_init_st:
+            // for (int row = 0; row < CONFIG_BOARD_R; row++) {
+            //     for (int col = 0; col < CONFIG_BOARD_C; col++) {
+            //         // Access the element at [row][col] in the myShips array
+            //         int shipStatus = enemyShips[row][col];
+
+            //         // Example operation: print the status of each cell
+            //         printf("enemyShips[%d][%d] = %d\n", row, col, shipStatus);
+            //     }
+            // }
+
+            // Reset grid
+            lcd_fillScreen(CONFIG_BACK_CLR);
+            graphics_drawGrid(CONFIG_GRID_CLR);
+            board_clear();
+
+            // Reset nav location to (0, 0)
+            nav_set_loc(0, 0);
+
+            break;
         case attack_wait_st:
+            // Gather how many lives left
+            //com_read(enemy_lives, sizeof(enemy_lives));
+
+            if (!pin_get_level(HW_BTN_A)) {
+                nav_get_loc(&r, &c);
+
+                // Check if spot has not been shot
+                if (board_get(r, c) == no_m) {
+                    isEmpty = true;
+                }
+            }
             
             break;
         case attack_shoot_st:
             // SET MARK
-            if (boolTurn) { //change to set based on hit or miss
-                //if (is_hit(row, column)) {
+            if (boolTurn) { // My turn
+                if (is_hit(r, c)) {
+                    board_set(r, c, hit_m);
+                    graphics_drawX(r, c, RED);
+                    enemy_lives--;
+                }
+                else {
+                    board_set(r, c, miss_m);
+                    graphics_drawO(r, c, GREEN);
+                }
 
-                //}
+                if (enemy_lives == 0) {
+                    win = MY_WIN;
+                }
             }
-            else {
-                
+            else { // Enemy turn
+                if (is_hit(r, c)) {
+                    board_set(r, c, hit_m);
+                    graphics_drawX(r, c, RED);
+                    player_lives--;
+                }
+                else {
+                    board_set(r, c, miss_m);
+                    graphics_drawO(r, c, GREEN);
+                }
+
+                if (player_lives == 0) {
+                    win = ENEMY_WIN;
+                }
             }
 
             // DISPLAY STATUS
             boolTurn = !boolTurn; // Switch turn
-            graphics_drawMessage(boolTurn ? "Next Player: X" : "Next Player: O", WHITE, CONFIG_BACK_CLR);
+            graphics_drawMessage(boolTurn ? "Player 1's Turn" : "Player 2's Turn", WHITE, CONFIG_BACK_CLR);
             break;
         case wait_restart_st:
             // WAIT FOR START BUTTON
             if (!pin_get_level(HW_BTN_START)) {
                 isRestart = false;
-                isWin = false;
+                win = 0;
                 currentState = init_st;
                 boolTurn = 1;
             }
