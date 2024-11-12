@@ -29,6 +29,8 @@
 #define ENEMY_WIN      2
 #define delayMS(ms) \
 	vTaskDelay(((ms)+(portTICK_PERIOD_MS-1))/portTICK_PERIOD_MS)
+#define CONFIG_GAME_TIMER_PERIOD 40.0E-3f
+#define PER_MS ((uint32_t)(CONFIG_GAME_TIMER_PERIOD*1000))
 
 // States for the SM
 enum Battleship_st_t {
@@ -239,6 +241,7 @@ void game_tick() {
                         for(;;){
                             if (pin_get_level(HW_BTN_A)) break; //prevent holding the button
                         };
+                    printf("Ship placed, remaining ships: %d\n", numShip+1);
                     }else{ //can't place
                         //TODO ADD VISUAL ERROR NOTICE
                     }                     
@@ -348,19 +351,21 @@ void game_tick() {
             // Reset grid
             lcd_fillScreen(CONFIG_BACK_CLR);
             graphics_drawGrid(CONFIG_GRID_CLR);
-            board_clear();
-
             // Reset nav location to (0, 0)
             nav_set_loc(0, 0);
+            graphics_drawHighlight(0,0,WHITE); //draw cursor at (0,0)
+            graphics_drawMessage("Player 1's Turn", WHITE, CONFIG_BACK_CLR); //Draw default player's turn
+            lcd_writeFrame(); //push buffer
 
             break;
         case attack_wait_st:
             // Gather how many lives left
             //com_read(enemy_lives, sizeof(enemy_lives));
+            nav_get_loc(&r, &c); //get cursor location
+            graphics_drawHighlight(r,c,WHITE); //draw cursor
+            lcd_writeFrame(); //push buffer
 
             if (!pin_get_level(HW_BTN_A)) {
-                nav_get_loc(&r, &c);
-
                 // Check if spot has not been shot
                 if (board_get(r, c) == no_m) {
                     isEmpty = true;
@@ -370,6 +375,7 @@ void game_tick() {
             break;
         case attack_shoot_st:
             // SET MARK
+            
             if (boolTurn) { // My turn
                 if (is_hit(r, c)) {
                     board_set(r, c, hit_m);
@@ -404,6 +410,7 @@ void game_tick() {
             // DISPLAY STATUS
             boolTurn = !boolTurn; // Switch turn
             graphics_drawMessage(boolTurn ? "Player 1's Turn" : "Player 2's Turn", WHITE, CONFIG_BACK_CLR);
+            lcd_writeFrame(); //push buffer
             break;
         case wait_restart_st:
             // WAIT FOR START BUTTON
