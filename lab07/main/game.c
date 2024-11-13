@@ -20,6 +20,7 @@
 #define MAX_SHIPS      5
 #define SHIP_CLR_SIZE  11
 #define SHIP_LIVES     15
+#define STAT_STR_LEN   40
 #define R1             0
 #define R2             1
 #define R3             2
@@ -65,14 +66,16 @@ const uint16_t ship_colors[SHIP_CLR_SIZE] = {
 static ship_t ships[MAX_SHIPS];
 static int ship_count;
 static uint8_t player_lives = SHIP_LIVES;
-static uint8_t enemy_lives = SHIP_LIVES;
+static uint8_t enemy_lives = SHIP_LIVES;  // TODO Change to SHIP_LIVES for non-debugging (8 for debugging)
 static int myShips[CONFIG_BOARD_R][CONFIG_BOARD_C];
 static int enemyShips[CONFIG_BOARD_R][CONFIG_BOARD_C];
+char shipPlaceStat[STAT_STR_LEN];
 //if total hits for a single player == total sizes of all ships then game over
 
 // Initialize SM
 void game_init() {
     currentState = init_st;
+    //for (int i = 0; i < CONFIG_BOARD_C; i++) enemyShips[i][i] = 1;  // TODO Debugging
 }
 
 void game_tick() {
@@ -92,7 +95,7 @@ void game_tick() {
     uint8_t bmrow1 = 0, bmrow2 = 0, bmrow3 = 0, bmrow4 = 0, bmrow5 = 0;
     uint8_t berow1 = 0, berow2 = 0, berow3 = 0, berow4 = 0, berow5 = 0;
 
-    printf("%d\n", currentState);
+    //printf("%d\n", currentState);
 
     // State transitions
     switch (currentState) {
@@ -241,9 +244,11 @@ void game_tick() {
                         for(;;){
                             if (pin_get_level(HW_BTN_A)) break; //prevent holding the button
                         };
-                    printf("Ship placed, remaining ships: %d\n", numShip+1);
-                    }else{ //can't place
-                        //TODO ADD VISUAL ERROR NOTICE
+                    sprintf(shipPlaceStat, "Ship placed, remaining ships: %d\n", numShip+1);
+                    graphics_drawMessage(shipPlaceStat, WHITE, CONFIG_BACK_CLR);
+
+                    } else { //can't place
+                        graphics_drawMessage("Invalid placement.", WHITE, CONFIG_BACK_CLR);
                     }                     
                 }
                 
@@ -330,10 +335,6 @@ void game_tick() {
                         enemyShipsReceived = true;
                     }
                 }
-
-                if (enemyShipsReceived == true) {
-                    break;
-                }
             }
             
             break;
@@ -360,7 +361,7 @@ void game_tick() {
             break;
         case attack_wait_st:
             // Gather how many lives left
-            //com_read(enemy_lives, sizeof(enemy_lives));
+            // com_read(enemy_lives, sizeof(enemy_lives));
             nav_get_loc(&r, &c); //get cursor location
             graphics_drawHighlight(r,c,WHITE); //draw cursor
             lcd_writeFrame(); //push buffer
@@ -377,7 +378,7 @@ void game_tick() {
             // SET MARK
             
             if (boolTurn) { // My turn
-                if (is_hit(r, c)) {
+                if (is_hit(r, c, enemyShips)) {
                     board_set(r, c, hit_m);
                     graphics_drawX(r, c, RED);
                     enemy_lives--;
@@ -392,7 +393,7 @@ void game_tick() {
                 }
             }
             else { // Enemy turn
-                if (is_hit(r, c)) {
+                if (is_hit(r, c, myShips)) {
                     board_set(r, c, hit_m);
                     graphics_drawX(r, c, RED);
                     player_lives--;
@@ -450,24 +451,9 @@ bool is_validShip(ship_t shipToCheck, int8_t r, int8_t c, bool currHor){
     return true; //no issues detected
 }
 
-bool is_hit(int8_t row, int8_t column) {
-    for (uint16_t i = 0; i < MAX_SHIPS; i++) {
-        ship_t *ship = &ships[i];
-
-        if (ship->horizontal) {
-            for (int j = 0; j < ship->length; j++) {
-                if (ship->r == row && (ship->c + j) == column) {
-                    return true;
-                }
-            }
-        }
-        else {
-            for (int j = 0; j < ship->length; j++) {
-                if (ship->c == column && (ship->r + j) == row) {
-                    return true;
-                }
-            }
-        }
+bool is_hit(int8_t row, int8_t column, int shipMap[CONFIG_BOARD_R][CONFIG_BOARD_C]) {
+    if (shipMap[row][column] == 1) {
+        return true;
     }
 
     return false;
