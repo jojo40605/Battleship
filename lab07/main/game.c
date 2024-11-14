@@ -19,6 +19,9 @@
 #define SHIP_CLR_SIZE  11
 #define SHIP_LIVES     15
 #define STAT_STR_LEN   40
+#define WIN_ID         8
+#define MISS_ID        2
+#define HIT_ID         4
 #define delayMS(ms) \
 	vTaskDelay(((ms)+(portTICK_PERIOD_MS-1))/portTICK_PERIOD_MS)
 #define CONFIG_GAME_TIMER_PERIOD 40.0E-3f
@@ -70,7 +73,8 @@ void game_tick() {
     static bool isRestart = false;
     static bool isEmpty = false;
     static bool win = false;      // No win
-    static bool winTurn = false;
+    static uint8_t winTurn = 0;
+//    static uint8_t hitByte = 0;
     static bool enemyShipsReceived = false;
     static bool boolTurn; // Player 1 = true, Player 2 = false
     static int8_t r, c;
@@ -143,7 +147,8 @@ void game_tick() {
             graphics_drawGrid(CONFIG_GRID_CLR);
             // New game variables
             boolTurn = true;
-            enemy_lives = SHIP_LIVES - 13;
+            enemy_lives = SHIP_LIVES;
+            isRestart = false;
             // SET NAV TO CENTER
             nav_set_loc(0,0);
             // DISPLAY NEXT PLAYER
@@ -318,7 +323,22 @@ void game_tick() {
                 }
             }
     
+            //com_read(&hitByte, sizeof(hitByte));
+
             com_read(&boolTurn, sizeof(boolTurn));
+
+            // if (hitByte == HIT_ID) {
+            //     graphics_drawMessage("Your opponent hit your ship!", WHITE, CONFIG_BACK_CLR);
+            //     lcd_writeFrame();
+            //     delayMS(1000);
+            //     hitByte = 0;
+            // }
+            // else if (hitByte == MISS_ID) {
+            //     graphics_drawMessage("Your opponent missed your ship!", WHITE, CONFIG_BACK_CLR);
+            //     lcd_writeFrame();
+            //     delayMS(1000);
+            //     hitByte = 0;
+            // }
 
             // If com_read returns true (occurs when opposing controller plays)
             if (boolTurn == true) {
@@ -328,7 +348,7 @@ void game_tick() {
 
             com_read(&winTurn, sizeof(winTurn));
 
-            if (winTurn == true) {
+            if (winTurn == WIN_ID) {
                 win = true;
                 graphics_drawMessage("You lost! Press \"Start\" to play again.", WHITE, CONFIG_BACK_CLR);
                 lcd_writeFrame();
@@ -343,24 +363,29 @@ void game_tick() {
                     board_set(r, c, hit_m);
                     graphics_drawX(r, c, RED);
                     graphics_drawMessage("Hit! Waiting for opponent...", WHITE, CONFIG_BACK_CLR);
+                    // hitByte = HIT_ID;
                     enemy_lives--;
                 }
                 else {
                     board_set(r, c, miss_m);
                     graphics_drawO(r, c, GREEN);
                     graphics_drawMessage("Miss! Waiting for opponent...", WHITE, CONFIG_BACK_CLR);
+                    // hitByte = MISS_ID;
                 }
+
+                // com_write(&hitByte, sizeof(hitByte));
+                // hitByte = 0;
 
                 if (enemy_lives == 0) {
                     win = true;
-                    winTurn = true;
+                    winTurn = WIN_ID;
                 }
 
-                if (winTurn) {
+                if (winTurn == WIN_ID) {
                     com_write(&winTurn, sizeof(winTurn));
                     graphics_drawMessage("You won! Press \"Start\" to play again.", WHITE, CONFIG_BACK_CLR);
                     lcd_writeFrame();
-                    winTurn = false;
+                    winTurn = 0;
                 }
                 
             }
@@ -371,10 +396,23 @@ void game_tick() {
         case wait_restart_st:
             // WAIT FOR START BUTTON
             if (!pin_get_level(HW_BTN_START)) {
+                // Reset stats
                 isRestart = true;
                 win = false;
-                currentState = new_game_st;
+                winTurn = 0;
+                currentState = init_st;
+                enemyShipsReceived = false;
                 boolTurn = true;
+                numShip = MAX_SHIPS - 1;
+                currHor = false;
+
+                // Clear ship arrays
+                for (int r = 0; r < CONFIG_BOARD_R; r++) {
+                    for (int c = 0; c < CONFIG_BOARD_C; c++) {
+                        myShips[r][c] = 0;
+                        enemyShips[r][c] = 0;
+                    }
+                }
             }
 
             break;
@@ -384,9 +422,10 @@ void game_tick() {
     }
 }
 
+// Check valid ship
 bool is_validShip(ship_t shipToCheck, int8_t r, int8_t c, bool currHor){
     //check cursor
-    if (myShips[r][c] !=0){
+    if (myShips[r][c] != 0){
         return false;
     }
 
@@ -407,6 +446,7 @@ bool is_validShip(ship_t shipToCheck, int8_t r, int8_t c, bool currHor){
     return true; //no issues detected
 }
 
+// Detect if there is a hit
 bool is_hit(int8_t row, int8_t column, int shipMap[CONFIG_BOARD_R][CONFIG_BOARD_C]) {
     if (shipMap[row][column] == 1) {
         return true;
