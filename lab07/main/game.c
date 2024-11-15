@@ -8,6 +8,7 @@
 #include "lcd.h"
 #include "joy.h"
 #include "pin.h"
+#include "sound.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -20,8 +21,8 @@
 #define SHIP_LIVES     15
 #define STAT_STR_LEN   40
 #define WIN_ID         8
-#define MISS_ID        2
-#define HIT_ID         4
+#define MISS_ID        0x21
+#define HIT_ID         0x31
 #define delayMS(ms) \
 	vTaskDelay(((ms)+(portTICK_PERIOD_MS-1))/portTICK_PERIOD_MS)
 #define CONFIG_GAME_TIMER_PERIOD 40.0E-3f
@@ -74,9 +75,9 @@ void game_tick() {
     static bool isEmpty = false;
     static bool win = false;      // No win
     static uint8_t winTurn = 0;
-//    static uint8_t hitByte = 0;
+    static uint8_t hitByte = 0x00;
     static bool enemyShipsReceived = false;
-    static bool boolTurn; // Player 1 = true, Player 2 = false
+    //static bool boolTurn; // Player 1 = true, Player 2 = false
     static int8_t r, c;
     static int8_t prev_r = -1, prev_c = -1;
     static bool prev_horizontal = true;
@@ -89,6 +90,7 @@ void game_tick() {
     uint8_t berow[CONFIG_BOARD_R] = {0};
 
     // State transitions
+    printf("%d: %x\n", currentState, hitByte);
     switch (currentState) {
         case init_st:
             currentState = new_game_st;
@@ -146,7 +148,7 @@ void game_tick() {
             // DRAW GRID 
             graphics_drawGrid(CONFIG_GRID_CLR);
             // New game variables
-            boolTurn = true;
+            hitByte = 0x01;
             enemy_lives = SHIP_LIVES;
             isRestart = false;
             // SET NAV TO CENTER
@@ -175,6 +177,7 @@ void game_tick() {
                 if ((r != prev_r) || (c != prev_c) || (prev_horizontal != currHor)) { //if the cursor moved or rotated
                 graphics_drawHighlight(r,c,WHITE); //draw cursor
                 graphics_drawMessage("PLACE YOUR SHIPS (PLACE - A   ROTATE - B)", WHITE, CONFIG_BACK_CLR); //redraw text
+                //TODO SOUND cursor move click?
 
                     //erase previous higlights
                     if (prev_horizontal){ // was Horizontal
@@ -215,6 +218,7 @@ void game_tick() {
 
                 if (!pin_get_level(HW_BTN_A)) { //Place ship button pressed
                     if (is_validShip(ships[numShip], r, c, currHor)){ //ship place is valid
+                        //todo sound ship place
                         graphics_drawHighlight(r,c,CYAN);
                         myShips[r][c] = 1;
                         if (currHor){ //Horizontal
@@ -300,7 +304,7 @@ void game_tick() {
                 continue;
             }
 
-            delayMS(1000);  // Delay so players can see Start message.
+            delayMS(400);  // Delay so players can see Start message.
 
             break;
         case attack_wait_st:
@@ -309,39 +313,42 @@ void game_tick() {
             nav_get_loc(&r, &c); //get cursor location
             graphics_drawHighlight(r,c,WHITE); //draw cursor
             lcd_writeFrame(); //push buffer
-
-            if (!pin_get_level(HW_BTN_A) && boolTurn) {
+            
+            
+            if (!pin_get_level(HW_BTN_A) && (hitByte & 0x01)) {
                 // Check if spot has not been shot
                 if (board_get(r, c) == no_m) {
                     isEmpty = true;
-                    com_write(&boolTurn, sizeof(boolTurn));
-                    boolTurn = false;
+                    com_write(&hitByte, sizeof(hitByte));
+                    //hitByte = hitByte & 0xF0;
+                    hitByte = 0;
                 }
                 else {
+                    //todo sound invalid shot
                     graphics_drawMessage("Invalid location.", WHITE, CONFIG_BACK_CLR);
                     lcd_writeFrame();
                 }
             }
     
-            //com_read(&hitByte, sizeof(hitByte));
+            
+            com_read(&hitByte, sizeof(hitByte));
+            //com_read(&boolTurn, sizeof(boolTurn));
 
-            com_read(&boolTurn, sizeof(boolTurn));
-
-            // if (hitByte == HIT_ID) {
-            //     graphics_drawMessage("Your opponent hit your ship!", WHITE, CONFIG_BACK_CLR);
-            //     lcd_writeFrame();
-            //     delayMS(1000);
-            //     hitByte = 0;
-            // }
-            // else if (hitByte == MISS_ID) {
-            //     graphics_drawMessage("Your opponent missed your ship!", WHITE, CONFIG_BACK_CLR);
-            //     lcd_writeFrame();
-            //     delayMS(1000);
-            //     hitByte = 0;
-            // }
+            if ((hitByte == HIT_ID)) {
+                graphics_drawMessage("Your opponent hit your ship!", WHITE, CONFIG_BACK_CLR);
+                lcd_writeFrame();
+                delayMS(1000);
+                hitByte = 0x01;
+            }
+            else if ((hitByte == MISS_ID)) {
+                graphics_drawMessage("Your opponent missed your ship!", WHITE, CONFIG_BACK_CLR);
+                lcd_writeFrame();
+                delayMS(1000);
+                hitByte = 0x01;
+            }
 
             // If com_read returns true (occurs when opposing controller plays)
-            if (boolTurn == true) {
+            if (hitByte == 0x01) {
                 graphics_drawMessage("Your turn.", WHITE, CONFIG_BACK_CLR);
                 lcd_writeFrame();
             }
@@ -349,6 +356,7 @@ void game_tick() {
             com_read(&winTurn, sizeof(winTurn));
 
             if (winTurn == WIN_ID) {
+                //todo sound loss
                 win = true;
                 graphics_drawMessage("You lost! Press \"Start\" to play again.", WHITE, CONFIG_BACK_CLR);
                 lcd_writeFrame();
@@ -358,23 +366,24 @@ void game_tick() {
         case attack_shoot_st:
             // SET MARK
             
-            if (!boolTurn) { // My turn
+            if (!(hitByte & 0x0F)) { // My turn
                 if (is_hit(r, c, enemyShips)) {
+                    //todo sound ship hit
                     board_set(r, c, hit_m);
                     graphics_drawX(r, c, RED);
                     graphics_drawMessage("Hit! Waiting for opponent...", WHITE, CONFIG_BACK_CLR);
-                    // hitByte = HIT_ID;
+                    hitByte = HIT_ID;
                     enemy_lives--;
                 }
                 else {
+                    //todo sound ship miss
                     board_set(r, c, miss_m);
                     graphics_drawO(r, c, GREEN);
                     graphics_drawMessage("Miss! Waiting for opponent...", WHITE, CONFIG_BACK_CLR);
-                    // hitByte = MISS_ID;
+                    hitByte = MISS_ID;
                 }
 
-                // com_write(&hitByte, sizeof(hitByte));
-                // hitByte = 0;
+                 
 
                 if (enemy_lives == 0) {
                     win = true;
@@ -382,11 +391,14 @@ void game_tick() {
                 }
 
                 if (winTurn == WIN_ID) {
+                    //todo sound win
                     com_write(&winTurn, sizeof(winTurn));
                     graphics_drawMessage("You won! Press \"Start\" to play again.", WHITE, CONFIG_BACK_CLR);
                     lcd_writeFrame();
                     winTurn = 0;
                 }
+                com_write(&hitByte, sizeof(hitByte));
+                hitByte = hitByte & 0xF0;
                 
             }
         
@@ -402,7 +414,7 @@ void game_tick() {
                 winTurn = 0;
                 currentState = init_st;
                 enemyShipsReceived = false;
-                boolTurn = true;
+                hitByte = 0x01;
                 numShip = MAX_SHIPS - 1;
                 currHor = false;
 
