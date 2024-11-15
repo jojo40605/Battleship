@@ -241,9 +241,9 @@ void game_tick() {
                     lcd_writeFrame();
 
                     } else { //can't place
+                        graphics_drawHighlight(r,c,WHITE);
                         graphics_drawMessage("Invalid placement.", WHITE, CONFIG_BACK_CLR);
                         lcd_writeFrame();
-                        delayMS(500);
                     }                     
                 }
 
@@ -319,7 +319,7 @@ void game_tick() {
                 // Check if spot has not been shot
                 if (board_get(r, c) == no_m) {
                     isEmpty = true;
-                    com_write(&hitByte, sizeof(hitByte));
+                    //com_write(&hitByte, sizeof(hitByte));
                     //hitByte = hitByte & 0xF0;
                     hitByte = 0;
                 }
@@ -351,6 +351,7 @@ void game_tick() {
             if (hitByte == 0x01) {
                 graphics_drawMessage("Your turn.", WHITE, CONFIG_BACK_CLR);
                 lcd_writeFrame();
+                hitByte = 0x01;
             }
 
             com_read(&winTurn, sizeof(winTurn));
@@ -444,13 +445,13 @@ bool is_validShip(ship_t shipToCheck, int8_t r, int8_t c, bool currHor){
     //check for other ships or edges
     if (currHor){ //Horizontal
         for (int i = 0; i < shipToCheck.length; i++){
-            if ((myShips[r][c+i] != 0) || (c+i > CONFIG_BOARD_C)){
+            if ((myShips[r][c+i] != 0) || (c+i >= CONFIG_BOARD_C)){
                 return false;
             };
         }
     } else{ //Vertical
         for (int i = 0; i < shipToCheck.length; i++){
-            if ((myShips[r+i][c] != 0) || (r+i > CONFIG_BOARD_R)){
+            if ((myShips[r+i][c] != 0) || (r+i >= CONFIG_BOARD_R)){
                 return false;
             };
         }
