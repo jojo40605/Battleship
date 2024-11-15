@@ -16,9 +16,9 @@
 
 #include <stdio.h>
 
-#define MAX_SHIPS      5
+#define MAX_SHIPS      2
 #define SHIP_CLR_SIZE  11
-#define SHIP_LIVES     15
+#define SHIP_LIVES     (MAX_SHIPS * (MAX_SHIPS + 1)) / 2
 #define STAT_STR_LEN   40
 #define WIN_ID         8
 #define MISS_ID        0x21
@@ -75,7 +75,7 @@ void game_tick() {
     static bool isEmpty = false;
     static bool win = false;      // No win
     static uint8_t winTurn = 0;
-    static uint8_t hitByte = 0x00;
+    static uint8_t hitByte = 0x01;
     static bool enemyShipsReceived = false;
     //static bool boolTurn; // Player 1 = true, Player 2 = false
     static int8_t r, c;
@@ -236,7 +236,12 @@ void game_tick() {
                         for(;;){
                             if (pin_get_level(HW_BTN_A)) break; //prevent holding the button
                         };
-                    sprintf(shipPlaceStat, "Ship placed, remaining ships: %d", numShip+1);
+                    if (numShip > -1){
+                        sprintf(shipPlaceStat, "Ship placed, remaining ships: %d", numShip+1);
+                        }
+                    else{
+                        sprintf(shipPlaceStat, "All ships placed, waiting for opponent!");
+                    }
                     graphics_drawMessage(shipPlaceStat, WHITE, CONFIG_BACK_CLR);
                     lcd_writeFrame();
 
@@ -319,8 +324,6 @@ void game_tick() {
                 // Check if spot has not been shot
                 if (board_get(r, c) == no_m) {
                     isEmpty = true;
-                    //com_write(&hitByte, sizeof(hitByte));
-                    //hitByte = hitByte & 0xF0;
                     hitByte = 0;
                 }
                 else {
@@ -337,13 +340,13 @@ void game_tick() {
             if ((hitByte == HIT_ID)) {
                 graphics_drawMessage("Your opponent hit your ship!", WHITE, CONFIG_BACK_CLR);
                 lcd_writeFrame();
-                delayMS(1000);
+                delayMS(700);
                 hitByte = 0x01;
             }
             else if ((hitByte == MISS_ID)) {
-                graphics_drawMessage("Your opponent missed your ship!", WHITE, CONFIG_BACK_CLR);
+                graphics_drawMessage("Your opponent missed your ships!", WHITE, CONFIG_BACK_CLR);
                 lcd_writeFrame();
-                delayMS(1000);
+                delayMS(700);
                 hitByte = 0x01;
             }
 
@@ -351,7 +354,6 @@ void game_tick() {
             if (hitByte == 0x01) {
                 graphics_drawMessage("Your turn.", WHITE, CONFIG_BACK_CLR);
                 lcd_writeFrame();
-                hitByte = 0x01;
             }
 
             com_read(&winTurn, sizeof(winTurn));
@@ -384,7 +386,8 @@ void game_tick() {
                     hitByte = MISS_ID;
                 }
 
-                 
+                com_write(&hitByte, sizeof(hitByte));
+                hitByte = hitByte & 0xF0;
 
                 if (enemy_lives == 0) {
                     win = true;
@@ -398,8 +401,7 @@ void game_tick() {
                     lcd_writeFrame();
                     winTurn = 0;
                 }
-                com_write(&hitByte, sizeof(hitByte));
-                hitByte = hitByte & 0xF0;
+                
                 
             }
         
@@ -445,13 +447,13 @@ bool is_validShip(ship_t shipToCheck, int8_t r, int8_t c, bool currHor){
     //check for other ships or edges
     if (currHor){ //Horizontal
         for (int i = 0; i < shipToCheck.length; i++){
-            if ((myShips[r][c+i] != 0) || (c+i >= CONFIG_BOARD_C)){
+            if ((myShips[r][c+i] != 0) || (c + i >= CONFIG_BOARD_C)){
                 return false;
             };
         }
     } else{ //Vertical
         for (int i = 0; i < shipToCheck.length; i++){
-            if ((myShips[r+i][c] != 0) || (r+i >= CONFIG_BOARD_R)){
+            if ((myShips[r+i][c] != 0) || (r + i >= CONFIG_BOARD_R)){
                 return false;
             };
         }
