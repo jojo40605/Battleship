@@ -16,7 +16,7 @@
 
 #include <stdio.h>
 
-#define MAX_SHIPS      2
+#define MAX_SHIPS      5
 #define SHIP_CLR_SIZE  11
 #define SHIP_LIVES     (MAX_SHIPS * (MAX_SHIPS + 1)) / 2
 #define STAT_STR_LEN   40
@@ -90,7 +90,6 @@ void game_tick() {
     uint8_t berow[CONFIG_BOARD_R] = {0};
 
     // State transitions
-    printf("%d: %x\n", currentState, hitByte);
     switch (currentState) {
         case init_st:
             currentState = new_game_st;
