@@ -314,7 +314,6 @@ void game_tick() {
             break;
         case attack_wait_st:
             // Gather how many lives left
-            // com_read(enemy_lives, sizeof(enemy_lives));
             nav_get_loc(&r, &c); //get cursor location
             graphics_drawHighlight(r,c,WHITE); //draw cursor
             lcd_writeFrame(); //push buffer
@@ -332,10 +331,8 @@ void game_tick() {
                     lcd_writeFrame();
                 }
             }
-    
             
             com_read(&hitByte, sizeof(hitByte));
-            //com_read(&boolTurn, sizeof(boolTurn));
 
             if ((hitByte == HIT_ID)) {
                 graphics_drawMessage("Your opponent hit your ship!", WHITE, CONFIG_BACK_CLR);
